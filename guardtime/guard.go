@@ -3,6 +3,8 @@ package guardtime
 import (
 	"sync"
 	"time"
+
+	"github.com/ndsky1003/guard/options"
 )
 
 /*
@@ -32,11 +34,19 @@ func NewGuardTime(interval time.Duration, err error) *guard_time {
 	return g
 }
 
-func (this *guard_time) Handle(key any) error {
+func (this *guard_time) Handle(key any, opts ...*options.GuardtimeOptions) error {
 	now := time.Now()
+	interval := this.interval
+	opt := options.GuardTime().Merge(opts...)
+	if opt.Interval != nil {
+		interval = *opt.Interval
+	}
 	if old, ok := this.m.LoadOrStore(key, now); ok {
 		sub := now.Sub(old.(time.Time))
-		if sub < this.interval {
+		if sub < interval {
+			if opt.Err != nil {
+				return opt.Err
+			}
 			return this.errTemplate
 		}
 	}
