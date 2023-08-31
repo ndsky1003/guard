@@ -6,8 +6,10 @@
 package guard
 
 import (
-	"fmt"
+	"errors"
 	"sync"
+
+	"github.com/ndsky1003/guard/options"
 )
 
 /*useage
@@ -21,20 +23,24 @@ import (
 */
 
 type guard struct {
-	m           sync.Map
-	errTemplate string
+	m   sync.Map
+	opt *options.GuardOptions
 }
 
-func NewGuard(errTemplate string) *guard {
+func NewGuard(opt *options.GuardOptions) *guard {
+	if opt == nil || opt.Err == nil {
+		panic("opt err must not nil")
+	}
 	return &guard{
-		errTemplate: errTemplate,
+		opt: opt,
 	}
 }
 
 // key 资源标识符
-func (this *guard) Check(key any) error {
+func (this *guard) Check(key any, opts ...*options.GuardOptions) error {
+	opt := options.Guard().Merge(this.opt).Merge(opts...)
 	if _, ok := this.m.LoadOrStore(key, struct{}{}); ok {
-		return fmt.Errorf(this.errTemplate, key)
+		return opt.Err
 	}
 	return nil
 }
@@ -43,10 +49,10 @@ func (this *guard) Release(key any) {
 	this.m.Delete(key)
 }
 
-var g = NewGuard("frequent operation:[%s]")
+var g = NewGuard(options.Guard().SetErr(errors.New("frequent operation")))
 
-func Check(key string) error {
-	return g.Check(key)
+func Check(key string, opts ...*options.GuardOptions) error {
+	return g.Check(key, opts...)
 }
 
 func Release(key string) {

@@ -3,21 +3,19 @@ package guard
 import (
 	"errors"
 	"testing"
-	"time"
+
+	"github.com/ndsky1003/guard/options"
 )
 
-func TestDcc(t *testing.T) {
-	t.Log("dd")
-	t.Error("ddddd")
-	gt := NewGuardTime(5*time.Second, errors.New("操作过多"))
-	t.Error(gt)
-	for i := 0; i < 100; i++ {
-		t.Log("dd")
-		t.Error("ddd")
-		if err := gt.Handle("cc"); err != nil {
-			t.Error(err)
-		}
+func TestGuard(t *testing.T) {
+	identider := "dddd"
+	_ = Check(identider)
+	if err := Check(identider, options.Guard().SetErr(errors.New("err1"))); err != nil {
+		t.Error(err)
 	}
-	t.Error("done")
-
+	// Release(identider)
+	if err := Check(identider, options.Guard().SetErr(errors.New("err2"))); err != nil {
+		t.Error(err)
+	}
+	Release(identider)
 }

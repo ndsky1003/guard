@@ -38,4 +38,7 @@ func (this *GuardtimeOptions) merge(opt *GuardtimeOptions) {
 	if opt.Interval != nil {
 		this.Interval = opt.Interval
 	}
+	if opt.Err != nil {
+		this.Err = opt.Err
+	}
 }
