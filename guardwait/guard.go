@@ -20,43 +20,44 @@ bucket := wg.GetBucket("ppxia",10)//获取一个桶 ,多大的桶, 这里就相�
 bucket.GotTicket() //阻塞获取票圈
 defer bucket.ReleaseTicket() //释放票圈
 */
-type guard_wait struct {
-	m              map[string]*bucket
+type GuardWait struct {
+	m              map[string]*Bucket
 	mutex          sync.Mutex
 	bucketLifeTime time.Duration
 	checkInterval  time.Duration
 }
 
-func (this *guard_wait) gc() {
+func (this *GuardWait) gc() {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 	now := time.Now()
 	for k, v := range this.m {
-		if v.lastUse.Add(this.bucketLifeTime).Before(now) && len(v.tickets) == v.cap { //保证所有的入场券已经归还给了桶
+		if v.lastUse.Add(this.bucketLifeTime).Before(now) && len(v.tickets) == v.cap { // 保证所有的入场券已经归还给了桶
 			fmt.Println("delete key:", k)
 			delete(this.m, k)
 		}
 	}
 }
 
-type bucket struct {
+type Bucket struct {
 	cap     int
 	tickets chan struct{}
 	lastUse time.Time
 }
 
-func (this *bucket) pushTicket(c int) {
+func (this *Bucket) pushTicket(c int) {
 	for i := 0; i < c; i++ {
 		this.tickets <- struct{}{}
 	}
 }
-func (this *bucket) ReleaseTicket() {
+
+func (this *Bucket) ReleaseTicket() {
 	this.tickets <- struct{}{}
 	this.lastUse = time.Now()
 }
 
 // 会阻塞
-func (this *bucket) GotTicket() {
+func (this *Bucket) GotTicket() {
 	<-this.tickets
 }
 
@@ -64,9 +65,9 @@ func (this *bucket) GotTicket() {
 checkInterval 检查间隔，是否有不用了的桶
 bucketLifeTime 桶多久不用就释放掉
 */
-func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *guard_wait {
-	g := &guard_wait{
-		m:              make(map[string]*bucket),
+func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *GuardWait {
+	g := &GuardWait{
+		m:              make(map[string]*Bucket),
 		checkInterval:  checkInterval,
 		bucketLifeTime: bucketLifeTime,
 	}
@@ -81,7 +82,7 @@ func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *gu
 	return g
 }
 
-func (this *guard_wait) GetBucket(key string, cap int) *bucket {
+func (this *GuardWait) GetBucket(key string, cap int) *Bucket {
 	if key == "" {
 		panic("key is empty")
 	}
@@ -90,7 +91,7 @@ func (this *guard_wait) GetBucket(key string, cap int) *bucket {
 	if v, ok := this.m[key]; ok {
 		return v
 	}
-	t := &bucket{
+	t := &Bucket{
 		cap:     cap,
 		tickets: make(chan struct{}, cap),
 	}
@@ -101,6 +102,6 @@ func (this *guard_wait) GetBucket(key string, cap int) *bucket {
 
 var wg = NewGuardWait(10*time.Second, 30*time.Minute)
 
-func GetBucket(key string) *bucket {
+func GetBucket(key string) *Bucket {
 	return wg.GetBucket(key, 1)
 }
