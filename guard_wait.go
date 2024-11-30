@@ -1,4 +1,4 @@
-package guardwait
+package guard
 
 import (
 	"fmt"
@@ -20,20 +20,20 @@ bucket := wg.GetBucket("ppxia",10)//获取一个桶 ,多大的桶, 这里就相�
 bucket.GotTicket() //阻塞获取票圈
 defer bucket.ReleaseTicket() //释放票圈
 */
-type GuardWait struct {
+type guard_wait struct {
 	m              map[string]*Bucket
-	mutex          sync.Mutex
+	l              sync.Mutex
 	bucketLifeTime time.Duration
 	checkInterval  time.Duration
 }
 
-func (this *GuardWait) gc() {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
+func (this *guard_wait) gc() {
+	this.l.Lock()
+	defer this.l.Unlock()
 	now := time.Now()
 	for k, v := range this.m {
 		if v.lastUse.Add(this.bucketLifeTime).Before(now) && len(v.tickets) == v.cap { // 保证所有的入场券已经归还给了桶
-			fmt.Println("delete key:", k)
+			fmt.Println("guard_wait gc delete key:", k)
 			delete(this.m, k)
 		}
 	}
@@ -65,8 +65,8 @@ func (this *Bucket) GotTicket() {
 checkInterval 检查间隔，是否有不用了的桶
 bucketLifeTime 桶多久不用就释放掉
 */
-func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *GuardWait {
-	g := &GuardWait{
+func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *guard_wait {
+	g := &guard_wait{
 		m:              make(map[string]*Bucket),
 		checkInterval:  checkInterval,
 		bucketLifeTime: bucketLifeTime,
@@ -82,12 +82,12 @@ func NewGuardWait(checkInterval time.Duration, bucketLifeTime time.Duration) *Gu
 	return g
 }
 
-func (this *GuardWait) GetBucket(key string, cap int) *Bucket {
+func (this *guard_wait) GetBucket(key string, cap int) *Bucket {
 	if key == "" {
 		panic("key is empty")
 	}
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
+	this.l.Lock()
+	defer this.l.Unlock()
 	if v, ok := this.m[key]; ok {
 		return v
 	}
@@ -102,6 +102,6 @@ func (this *GuardWait) GetBucket(key string, cap int) *Bucket {
 
 var wg = NewGuardWait(10*time.Second, 30*time.Minute)
 
-func GetBucket(key string) *Bucket {
-	return wg.GetBucket(key, 1)
+func GetBucket(key string, cap int) *Bucket {
+	return wg.GetBucket(key, cap)
 }
