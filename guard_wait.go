@@ -57,8 +57,20 @@ func (this *Bucket) ReleaseTicket() {
 }
 
 // 会阻塞
-func (this *Bucket) GotTicket() {
+func (this *Bucket) GotTicket() *Bucket {
 	<-this.tickets
+	return this
+}
+
+func Wait(key string, cap int) *Bucket {
+	bucket := GetBucket(key, cap)
+	return bucket.GotTicket()
+}
+
+// 只有一个票, 用于单个资源的互斥访问
+func WaitAtomic(key string) *Bucket {
+	bucket := GetBucket(key, 1)
+	return bucket.GotTicket()
 }
 
 /*
