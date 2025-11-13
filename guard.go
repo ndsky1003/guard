@@ -21,14 +21,14 @@ import (
 */
 
 type guard struct {
-	m   sync.Map
+	sync.Map
 	opt *Option
 }
 
-var err = errors.New("frequent operation")
-
 func NewGuard(opts ...*Option) *guard {
-	opt := Options().SetErr(err).Merge(opts...)
+	opt := Options().
+		SetErr(errors.New("Frequent handling")).
+		Merge(opts...)
 	return &guard{
 		opt: opt,
 	}
@@ -37,14 +37,14 @@ func NewGuard(opts ...*Option) *guard {
 // key 资源标识符
 func (this *guard) Check(key any, opts ...*Option) error {
 	opt := Options().Merge(this.opt).Merge(opts...)
-	if _, ok := this.m.LoadOrStore(key, struct{}{}); ok {
+	if _, ok := this.LoadOrStore(key, struct{}{}); ok {
 		return opt.Err
 	}
 	return nil
 }
 
 func (this *guard) Release(key any) {
-	this.m.Delete(key)
+	this.Delete(key)
 }
 
 var g = NewGuard()
@@ -55,4 +55,37 @@ func Check(key string, opts ...*Option) error {
 
 func Release(key string) {
 	g.Release(key)
+}
+
+// ========================option========================
+type Option struct {
+	Err error
+}
+
+func Options() *Option {
+	return &Option{}
+}
+
+func (this *Option) SetErr(e error) *Option {
+	if this == nil {
+		return this
+	}
+	this.Err = e
+	return this
+}
+
+func (this *Option) Merge(opts ...*Option) *Option {
+	for _, opt := range opts {
+		this.merge(opt)
+	}
+	return this
+}
+
+func (this *Option) merge(opt *Option) {
+	if opt == nil {
+		return
+	}
+	if opt.Err != nil {
+		this.Err = opt.Err
+	}
 }
