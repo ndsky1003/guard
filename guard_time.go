@@ -2,8 +2,9 @@ package guard
 
 import (
 	"errors"
-	"sync"
 	"time"
+
+	"github.com/ndsky1003/lease"
 )
 
 /*
@@ -16,9 +17,8 @@ usage
 	}
 */
 type guard_time struct {
-	sync.Map
 	opt *OptionGuardtime
-	l   sync.Mutex
+	l   *lease.Lease[any, time.Time]
 }
 
 // 在极短的时间里，操作了这个资源
@@ -27,13 +27,14 @@ type guard_time struct {
 func NewGuardTime(opts ...*OptionGuardtime) *guard_time {
 	opt := OptionsGuardtime().
 		SetInterval(5 * time.Second).
-		SetClearInterval(30 * time.Second).
-		SetErr(errors.New("操作过多")).
+		SetClearInterval(10 * time.Minute).
+		SetErr(errors.New("Too many operations")).
 		Merge(opts...)
 	g := &guard_time{
 		opt: opt,
 	}
-	go g.auto_release()
+	g.l = lease.NewWithOptions(lease.Options[any, time.Time]{Tick: 10 * time.Minute, RenewInterval: 1 * time.Second})
+
 	return g
 }
 
@@ -41,27 +42,16 @@ func (this *guard_time) Handle(key any, opts ...*OptionGuardtime) error {
 	opt := OptionsGuardtime().Merge(this.opt).Merge(opts...)
 	now := time.Now()
 	interval := *opt.Interval
-	this.l.Lock()
-	defer this.l.Unlock()
-	if old, ok := this.Load(key); ok && now.Sub(old.(time.Time)) < interval {
-		return opt.Err
-	}
-	this.Store(key, now)
-	return nil
-}
 
-func (this *guard_time) auto_release() {
-	opt := this.opt
-	for {
-		now := time.Now()
-		this.Range(func(key, value any) bool {
-			if now.Sub(value.(time.Time)) > *opt.Interval {
-				this.Delete(key)
-			}
-			return true
-		})
-		time.Sleep(*opt.ClearInterval * time.Second)
+	old, release, ok := this.l.Get(key)
+	if ok {
+		defer release()
+		if now.Sub(old) < interval {
+			return opt.Err
+		}
 	}
+	this.l.Set(key, time.Now(), 2*interval)
+	return nil
 }
 
 type OptionGuardtime struct {
