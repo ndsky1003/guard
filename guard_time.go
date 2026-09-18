@@ -33,7 +33,7 @@ func NewGuardTime(opts ...*OptionGuardtime) *guard_time {
 	g := &guard_time{
 		opt: opt,
 	}
-	g.l = lease.NewWithOptions(lease.Options[any, time.Time]{Tick: 10 * time.Minute, RenewInterval: 1 * time.Second})
+	g.l = lease.NewWithOptions(lease.Options[any, time.Time]{Tick: *opt.ClearInterval, RenewInterval: 1 * time.Second})
 
 	return g
 }
@@ -42,7 +42,6 @@ func (this *guard_time) Handle(key any, opts ...*OptionGuardtime) error {
 	opt := OptionsGuardtime().Merge(this.opt).Merge(opts...)
 	now := time.Now()
 	interval := *opt.Interval
-
 	old, release, ok := this.l.Get(key)
 	if ok {
 		defer release()
@@ -56,7 +55,7 @@ func (this *guard_time) Handle(key any, opts ...*OptionGuardtime) error {
 
 type OptionGuardtime struct {
 	Interval      *time.Duration //eg:5s 5s内操作多次就会报错
-	ClearInterval *time.Duration //eg:30s 一个key30s内没被消费就清理掉
+	ClearInterval *time.Duration //eg:30s gc周期
 	Err           error
 }
 

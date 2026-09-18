@@ -1,0 +1,4 @@
+github.com/ndsky1003/lease v1.0.2 h1:up7msk2nEpDSd0GWWwwW1omuZXqrTPzJ9zRPfFFZiwM=
+github.com/ndsky1003/lease v1.0.2/go.mod h1:1y0cDQUFLGqB5dDKFteW8hel++9ncv63KBW7wMMAgks=
+golang.org/x/sync v0.23.0 h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=
+golang.org/x/sync v0.23.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
