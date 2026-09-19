@@ -1,14 +1,15 @@
 package guard
 
 import (
-	"fmt"
 	"sync"
 	"time"
+
+	"github.com/ndsky1003/lease"
 )
 
 type guard_wait_cond struct {
-	m              map[string]*BucketCond
-	l              sync.Mutex
+	l              *lease.Lease[string, *BucketCond]
+	mu             sync.Mutex
 	bucketLifeTime time.Duration
 	checkInterval  time.Duration
 }
@@ -18,37 +19,45 @@ type BucketCond struct {
 	available int        // 可用票数
 	cond      *sync.Cond // 条件变量
 	mu        sync.Mutex // 保护available
-	lastUse   time.Time
-	waiting   int // 等待中的goroutine数量
+	waiting   int        // 等待中的goroutine数量
+	touch     func()     // 记录一次访问，续期租约
 }
 
 func NewGuardWaitCond(checkInterval, bucketLifeTime time.Duration) *guard_wait_cond {
+	if checkInterval <= 0 {
+		checkInterval = time.Second
+	}
 	g := &guard_wait_cond{
-		m:              make(map[string]*BucketCond),
 		checkInterval:  checkInterval,
 		bucketLifeTime: bucketLifeTime,
 	}
-	if checkInterval != 0 && bucketLifeTime != 0 {
-		go g.gc()
-	}
+	g.l = lease.NewWithOptions(lease.Options[string, *BucketCond]{
+		Tick: checkInterval,
+	})
 	return g
 }
 
 func (g *guard_wait_cond) GetBucket(key string, cap int) *BucketCond {
-	g.l.Lock()
-	defer g.l.Unlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
-	if v, ok := g.m[key]; ok {
+	if v, release, ok := g.l.Get(key); ok {
+		defer release()
 		return v
 	}
 
 	bucket := &BucketCond{
 		cap:       cap,
 		available: cap,
-		lastUse:   time.Now(),
 	}
 	bucket.cond = sync.NewCond(&bucket.mu)
-	g.m[key] = bucket
+	bucket.touch = func() {
+		_, release, ok := g.l.Get(key)
+		if ok {
+			release()
+		}
+	}
+	g.l.Set(key, bucket, g.bucketLifeTime)
 	return bucket
 }
 
@@ -63,7 +72,9 @@ func (b *BucketCond) GotTicket() *BucketCond {
 	}
 
 	b.available--
-	b.lastUse = time.Now()
+	if b.touch != nil {
+		b.touch()
+	}
 	return b
 }
 
@@ -75,11 +86,13 @@ func (b *BucketCond) ReleaseTicket() {
 	if b.available > b.cap {
 		b.available = b.cap // 防止溢出
 	}
-	b.lastUse = time.Now()
 
 	// 通知等待的goroutine
 	if b.waiting > 0 {
 		b.cond.Signal() // 通知一个等待者
+	}
+	if b.touch != nil {
+		b.touch()
 	}
 }
 
@@ -89,25 +102,10 @@ func (b *BucketCond) TryGotTicket() bool {
 
 	if b.available > 0 {
 		b.available--
-		b.lastUse = time.Now()
+		if b.touch != nil {
+			b.touch()
+		}
 		return true
 	}
 	return false
-}
-
-func (g *guard_wait_cond) gc() {
-	for {
-		time.Sleep(g.checkInterval)
-		g.l.Lock()
-		now := time.Now()
-		for k, v := range g.m {
-			v.mu.Lock()
-			if v.lastUse.Add(g.bucketLifeTime).Before(now) && v.available == v.cap && v.waiting == 0 {
-				fmt.Println("guard_wait_cond gc delete key:", k)
-				delete(g.m, k)
-			}
-			v.mu.Unlock()
-		}
-		g.l.Unlock()
-	}
 }

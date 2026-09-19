@@ -123,7 +123,7 @@ func (m rwmutex) RUnlock() {
 var _gm = NewGuardRWMutex(time.Hour)
 
 func GetRWLock(key any) *rwmutex {
-	v, release, _ := _gm.l.MustGet(key, gm.TTL)
+	v, release, _ := _gm.l.MustGet(key, _gm.TTL)
 	return &rwmutex{
 		_RWMutex: v,
 		fn:       release,
