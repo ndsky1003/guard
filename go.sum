@@ -1,6 +1,4 @@
-github.com/ndsky1003/lease v1.0.0 h1:+5DHz2wonvd0nbTwBomKLN5MZoLKJ86tMBDt1320Xjw=
-github.com/ndsky1003/lease v1.0.0/go.mod h1:1y0cDQUFLGqB5dDKFteW8hel++9ncv63KBW7wMMAgks=
-github.com/ndsky1003/timingwheel/v2 v2.0.0 h1:fqp8foQ3xHZGe/Pst+y0MC/aXssLLaJuaUwU5QsZb4k=
-github.com/ndsky1003/timingwheel/v2 v2.0.0/go.mod h1:f5WXwQd+pzcGPKG8pF+OCwdtMsRT3I2hcDKXZtStcCo=
+github.com/ndsky1003/lease v1.0.2 h1:up7msk2nEpDSd0GWWwwW1omuZXqrTPzJ9zRPfFFZiwM=
+github.com/ndsky1003/lease v1.0.2/go.mod h1:1y0cDQUFLGqB5dDKFteW8hel++9ncv63KBW7wMMAgks=
 golang.org/x/sync v0.23.0 h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=
 golang.org/x/sync v0.23.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
