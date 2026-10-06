@@ -66,10 +66,18 @@ if err := gt.Handle("user_id"); err != nil {
 | 字段 | 说明 |
 |------|------|
 | `SetInterval(i)` | 防抖间隔，间隔内再次 `Handle` 返回 `Err` |
-| `SetClearInterval(i)` | 过期记录的清理粒度（内部时间轮 tick） |
-| `SetErr(e)` | 自定义错误 |
+| `SetTick(i)` | 租约到期检查粒度（内部时间轮 tick） |
+| `SetRenewInterval(i)` | 续期合并阈值（`<=0` 表示每次访问都续期） |
+| `SetErr(e)` | 默认错误 |
 
-`Handle(key any, opts ...*OptionGuardtime)` 首次调用成功，间隔内重复调用返回错误，超过间隔后恢复。
+`Handle(key any, opts ...*OptionGuardtimeHandle)` 首次调用成功，间隔内重复调用返回错误，超过间隔后恢复。
+
+不同 key 可用不同间隔（通过 `OptionGuardtimeHandle` 覆盖默认值）：
+
+```go
+gt.Handle("login",    guard.OptionsGuardtimeHandle().SetInterval(5 * time.Second))
+gt.Handle("sendcode", guard.OptionsGuardtimeHandle().SetInterval(60 * time.Second))
+```
 
 ---
 
@@ -80,7 +88,10 @@ if err := gt.Handle("user_id"); err != nil {
 ### 互斥锁
 
 ```go
-m := guard.GetLock("resource_id")
+g := guard.NewGuardMutex(time.Hour, 30*time.Second, time.Second)
+defer g.Close() // 用完后停止后台时间轮
+
+m := g.GetLock("resource_id")
 m.Lock()
 defer m.Unlock()
 // 临界区
@@ -89,7 +100,10 @@ defer m.Unlock()
 ### 读写锁
 
 ```go
-m := guard.GetRWLock("resource_id")
+g := guard.NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
+defer g.Close()
+
+m := g.GetRWLock("resource_id")
 m.Lock()    // 写锁
 m.Unlock()
 
@@ -97,7 +111,8 @@ m.RLock()   // 读锁
 m.RUnlock()
 ```
 
-- `GetLock(key)` / `GetRWLock(key)` 使用包级单例，默认 TTL 1 小时。
+- `NewGuardMutex(ttl, tick, renewInterval)` / `NewGuardRWMutex(...)` 创建管理器，`GetLock(key)` / `GetRWLock(key)` 获取命名锁，同一 key 返回同一把底层锁。
+- `ttl` 为单把锁的空闲存活时长（最小 1 分钟），`tick` 为到期检查粒度，`renewInterval` 为续期合并阈值。
 - `Lock`/`Unlock`（读写锁还有 `RLock`/`RUnlock`）必须成对调用，`Unlock` 会释放本次租约引用。
 
 ---

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -10,7 +11,7 @@ func BenchmarkGuardCheck(b *testing.B) {
 	g := NewGuard()
 	b.RunParallel(func(pb *testing.PB) {
 		for i := 0; pb.Next(); i++ {
-			key := i % 1000
+			key := strconv.Itoa(i % 1000)
 			if err := g.Check(key); err == nil {
 				g.Release(key)
 			}
@@ -20,6 +21,7 @@ func BenchmarkGuardCheck(b *testing.B) {
 
 func BenchmarkGuardTimeHandle(b *testing.B) {
 	gt := NewGuardTime(OptionsGuardtime().SetInterval(time.Second))
+	defer gt.Close()
 	b.RunParallel(func(pb *testing.PB) {
 		for i := 0; pb.Next(); i++ {
 			gt.Handle(i % 1000)
@@ -28,9 +30,11 @@ func BenchmarkGuardTimeHandle(b *testing.B) {
 }
 
 func BenchmarkGuardMutexLock(b *testing.B) {
+	g := NewGuardMutex(time.Hour, 30*time.Second, time.Second)
+	defer g.Close()
 	b.RunParallel(func(pb *testing.PB) {
 		for i := 0; pb.Next(); i++ {
-			m := GetLock(i % 1000)
+			m := g.GetLock(i % 1000)
 			m.Lock()
 			m.Unlock()
 		}
@@ -38,9 +42,11 @@ func BenchmarkGuardMutexLock(b *testing.B) {
 }
 
 func BenchmarkGuardRWMutexLock(b *testing.B) {
+	g := NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
+	defer g.Close()
 	b.RunParallel(func(pb *testing.PB) {
 		for i := 0; pb.Next(); i++ {
-			m := GetRWLock(i % 1000)
+			m := g.GetRWLock(i % 1000)
 			m.Lock()
 			m.Unlock()
 		}
@@ -48,9 +54,11 @@ func BenchmarkGuardRWMutexLock(b *testing.B) {
 }
 
 func BenchmarkGuardRWMutexRLock(b *testing.B) {
+	g := NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
+	defer g.Close()
 	b.RunParallel(func(pb *testing.PB) {
 		for i := 0; pb.Next(); i++ {
-			m := GetRWLock(i % 1000)
+			m := g.GetRWLock(i % 1000)
 			m.RLock()
 			m.RUnlock()
 		}

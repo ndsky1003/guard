@@ -6,7 +6,7 @@ Go 库（`github.com/ndsky1003/guard`），不是应用，无 `main` 入口。�
 
 ```sh
 go build ./...
-go test ./...   # 目前无任何测试文件
+go test ./...
 go vet ./...
 ```
 
@@ -19,10 +19,11 @@ go vet ./...
 
 ## 架构（三种门卫，同包共存）
 
-- `guard.go`：行锁语义，`Check(key)` / `Release(key)`，基于 `sync.Map.LoadOrStore`，冲突直接返回 `Option.Err`。
-- `guard_time.go`：防抖，`NewGuardTime(...)` + `Handle(key)`，用 `lease.Lease` 记录时间戳，间隔内重复调用返回 `OptionGuardtime.Err`。
-- `guard_mutex.go`：`GetLock(key)` / `GetRWLock(key)`，基于 `lease.Lease`，TTL 强制最小 `1*time.Minute`。
-- 包级单例 `g`、`gm`、`_gm` 在包初始化时创建（默认 TTL 为 1 小时）。
+- `guard.go`：行锁语义，`NewGuard(errs ...error)` + `Check(key)` / `Acquire(key)` / `Release(key)`，基于 `sync.Map.LoadOrStore`，冲突返回实例错误（默认 `ErrResourceInUse`）。
+- `guard_time.go`：防抖，`NewGuardTime(...)` + `Handle(key, opts ...*OptionGuardtimeHandle)`，用 `lease.Lease` 记录时间戳，间隔内重复调用返回错误。
+- `guard_mutex.go`：`NewGuardMutex(ttl, tick, renewInterval)` + 实例方法 `GetLock(key)`，基于 `lease.Lease`，TTL 强制最小 `1*time.Minute`，`Close()` 停止后台时间轮。
+- `guard_rwmutex.go`：`NewGuardRWMutex(ttl, tick, renewInterval)` + 实例方法 `GetRWLock(key)`，同上。
+- 仅 `guard.go` 有包级单例 `defaultGuard`（`atomic.Pointer`，`init` 时创建，可用 `SetDefault` 替换）；`guard_mutex` 为纯实例，无全局单例。
 
 ## 已知陷阱
 
@@ -32,5 +33,5 @@ go vet ./...
 
 ## 风格约定
 
-- Option 模式统一：`NewXxx(opts ...*OptionXxx)`，`OptionXxx` 的 setter 返回 `*OptionXxx` 支持链式，`Merge` 只覆盖非零值。
+- 配置风格：`guard_time` 用 Option 模式（`OptionGuardtime` 多字段，setter 返回 `*OptionGuardtime` 支持链式，`Merge` 只覆盖非零值）；`guard.go` 已去掉 Option（单字段，直接传 `error`）；`guard_mutex` 直接传 `ttl/tick/renewInterval` 参数。
 - 代码注释与提交信息均为中文。

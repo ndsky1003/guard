@@ -8,6 +8,7 @@ import (
 
 func TestGuardTimeHandle(t *testing.T) {
 	gt := NewGuardTime(OptionsGuardtime().SetInterval(50 * time.Millisecond))
+	defer gt.Close()
 	if err := gt.Handle("k"); err != nil {
 		t.Fatalf("首次 Handle 应成功, 得到错误: %v", err)
 	}
@@ -25,6 +26,7 @@ func TestGuardTimeCustomErr(t *testing.T) {
 	gt := NewGuardTime(OptionsGuardtime().
 		SetInterval(50 * time.Millisecond).
 		SetErr(custom))
+	defer gt.Close()
 	gt.Handle("k")
 	if err := gt.Handle("k"); err != custom {
 		t.Fatalf("期望自定义错误 %v, 得到 %v", custom, err)
@@ -33,10 +35,17 @@ func TestGuardTimeCustomErr(t *testing.T) {
 
 func TestGuardTimeDifferentKeys(t *testing.T) {
 	gt := NewGuardTime(OptionsGuardtime().SetInterval(time.Second))
+	defer gt.Close()
 	if err := gt.Handle("a"); err != nil {
 		t.Fatalf("Handle a 失败: %v", err)
 	}
 	if err := gt.Handle("b"); err != nil {
 		t.Fatalf("不同 key 不应冲突, 得到错误: %v", err)
 	}
+}
+
+func TestGuardTimeClose(t *testing.T) {
+	gt := NewGuardTime()
+	gt.Close()
+	gt.Close() // 重复调用应安全（幂等），不应 panic
 }
