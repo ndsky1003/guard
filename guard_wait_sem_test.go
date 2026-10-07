@@ -109,3 +109,112 @@ func TestGuardWaitBucketNotEvictedWhileAcquired(t *testing.T) {
 		t.Fatal("释放后信号量未回收")
 	}
 }
+
+func TestGuardWaitSemWeighted(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	sem, _ := gw.GetSem("k", 10)
+	defer sem.Release()
+
+	if err := sem.Acquire(context.Background(), 3); err != nil {
+		t.Fatalf("Acquire(3) 失败: %v", err)
+	}
+	if err := sem.Acquire(context.Background(), 7); err != nil {
+		t.Fatalf("Acquire(7) 失败: %v", err)
+	}
+
+	// 已满，再获取应超时
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := sem.Acquire(ctx, 1); err == nil {
+		t.Fatal("容量已满应超时")
+	}
+
+	sem.ReleaseTicket(3)
+	if err := sem.Acquire(context.Background(), 3); err != nil {
+		t.Fatalf("释放后 Acquire(3) 失败: %v", err)
+	}
+	sem.ReleaseTicket(10)
+}
+
+func TestGuardWaitSemDifferentCap(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	s1, _ := gw.GetSem("k", 1)
+	s2, _ := gw.GetSem("k", 2)
+	defer s1.Release()
+	defer s2.Release()
+
+	if s1.sem == s2.sem {
+		t.Fatal("相同 key 不同 cap 不应复用同一信号量")
+	}
+}
+
+func TestGuardWaitSemInvalidN(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	sem, _ := gw.GetSem("k", 2)
+	defer sem.Release()
+
+	if err := sem.Acquire(context.Background(), 0); err == nil {
+		t.Fatal("n=0 应报错")
+	}
+	if err := sem.Acquire(context.Background(), -1); err == nil {
+		t.Fatal("n<0 应报错")
+	}
+	if err := sem.Acquire(context.Background(), 3); err == nil {
+		t.Fatal("n>cap 应报错")
+	}
+}
+
+func TestGuardWaitSemReleaseTicketInvalid(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	sem, _ := gw.GetSem("k", 2)
+	defer sem.Release()
+
+	if err := sem.Acquire(context.Background(), 1); err != nil {
+		t.Fatalf("Acquire 失败: %v", err)
+	}
+	sem.ReleaseTicket(1)
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("ReleaseTicket(0) 应 panic")
+			}
+		}()
+		sem.ReleaseTicket(0)
+	}()
+}
+
+func TestGuardWaitSemAcquireFailNoTicket(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	sem, _ := gw.GetSem("k", 1)
+	defer sem.Release()
+
+	if err := sem.Acquire(context.Background(), 1); err != nil {
+		t.Fatalf("首次 Acquire 失败: %v", err)
+	}
+
+	// 已满，超时失败，不应占用许可
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := sem.Acquire(ctx, 1); err == nil {
+		t.Fatal("应超时")
+	}
+
+	// 释放后能正常获取
+	sem.ReleaseTicket(1)
+	if err := sem.Acquire(context.Background(), 1); err != nil {
+		t.Fatalf("释放后 Acquire 失败: %v", err)
+	}
+	sem.ReleaseTicket(1)
+}
+
+func TestGuardWaitSemCloseIdempotent(t *testing.T) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	gw.Close()
+	gw.Close() // 幂等，不应 panic
+}

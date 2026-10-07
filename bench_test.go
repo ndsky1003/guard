@@ -93,7 +93,9 @@ func BenchmarkGuardWaitAcquireContended(b *testing.B) {
 
 func BenchmarkGuardWaitCondTicket(b *testing.B) {
 	g := NewGuardWaitCond(time.Second, time.Minute)
-	bucket := g.GetBucket("k", 1024)
+	defer g.Close()
+	bucket, _ := g.GetBucket("k", 1024)
+	defer bucket.Release()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			bucket.GotTicket()
@@ -104,11 +106,63 @@ func BenchmarkGuardWaitCondTicket(b *testing.B) {
 
 func BenchmarkGuardWaitCondTicketContended(b *testing.B) {
 	g := NewGuardWaitCond(time.Second, time.Minute)
-	bucket := g.GetBucket("k", 1)
+	defer g.Close()
+	bucket, _ := g.GetBucket("k", 1)
+	defer bucket.Release()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			bucket.GotTicket()
 			bucket.ReleaseTicket()
+		}
+	})
+}
+
+func BenchmarkGuardAcquire(b *testing.B) {
+	g := NewGuard()
+	b.RunParallel(func(pb *testing.PB) {
+		for i := 0; pb.Next(); i++ {
+			key := strconv.Itoa(i % 1000)
+			release, err := g.Acquire(key)
+			if err == nil {
+				release()
+			}
+		}
+	})
+}
+
+func BenchmarkGuardMutexLockContended(b *testing.B) {
+	g := NewGuardMutex(time.Hour, 30*time.Second, time.Second)
+	defer g.Close()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			m := g.GetLock(1) // 固定 key，模拟高竞争
+			m.Lock()
+			m.Unlock()
+		}
+	})
+}
+
+func BenchmarkGuardRWMutexRLockContended(b *testing.B) {
+	g := NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
+	defer g.Close()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			m := g.GetRWLock(1) // 固定 key，模拟高竞争
+			m.RLock()
+			m.RUnlock()
+		}
+	})
+}
+
+func BenchmarkGuardWaitSemWeighted(b *testing.B) {
+	gw := NewGuardWaitSem(time.Second, time.Minute)
+	defer gw.Close()
+	bucket, _ := gw.GetSem("k", 1024)
+	defer bucket.Release()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = bucket.Acquire(context.Background(), 4)
+			bucket.ReleaseTicket(4)
 		}
 	})
 }

@@ -24,12 +24,13 @@ go vet ./...
 - `guard_mutex.go`：`NewGuardMutex(ttl, tick, renewInterval)` + 实例方法 `GetLock(key)`，基于 `lease.Lease`，TTL 强制最小 `1*time.Minute`，`Close()` 停止后台时间轮。
 - `guard_rwmutex.go`：`NewGuardRWMutex(ttl, tick, renewInterval)` + 实例方法 `GetRWLock(key)`，同上。
 - `guard_wait_sem.go`：限流，`NewGuardWaitSem(checkInterval, ttl)` + 实例方法 `GetSem(key, cap)`，基于 `semaphore.Weighted`，`Sem.Acquire(ctx, n)` / `ReleaseTicket(n)` / `Release()` 分别管理许可与租约引用。
+- `guard_wait_cron.go`：限流的另一套实现，基于 `sync.Cond`，`NewGuardWaitCond` 返回 `*GuardWaitCond`，`GetBucket(key, cap)` → `BucketCond.GotTicket()/ReleaseTicket()/TryGotTicket()/Release()`。
 - 仅 `guard.go` 有包级单例 `defaultGuard`（`atomic.Pointer`，`init` 时创建，可用 `SetDefault` 替换）；`guard_mutex` 为纯实例，无全局单例。
 
 ## 已知陷阱
 
-- 当前生效的限流 API 在 `guard_wait_sem.go`：`NewGuardWaitSem(checkInterval, ttl)` → `GetSem(key, cap int64) (*Sem, error)` → `Sem.Acquire(ctx, n)` / `Sem.ReleaseTicket(n)` / `Sem.Release()`。
-- **两套 guardwait 实现并存**：`guard_wait_cron.go` 是旧版（基于 `sync.Cond`），其类型 `guard_wait_cond`、`NewGuardWaitCond`、`BucketCond` 均为未导出，外部不可用，属历史遗留；改动限流逻辑请改 `guard_wait_sem.go`。
+- 主限流 API 在 `guard_wait_sem.go`：`NewGuardWaitSem(checkInterval, ttl)` → `GetSem(key, cap int64) (*Sem, error)` → `Sem.Acquire(ctx, n)` / `Sem.ReleaseTicket(n)` / `Sem.Release()`。
+- **两套 guardwait 实现并存**：`guard_wait_sem.go`（`semaphore.Weighted`，支持 context 与加权）与 `guard_wait_cron.go`（`sync.Cond`，不支持 context、固定 1 票，但高竞争场景零分配）。改动限流逻辑优先改 `guard_wait_sem.go`。
 
 ## 风格约定
 

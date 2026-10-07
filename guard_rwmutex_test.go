@@ -66,3 +66,53 @@ func TestGuardRWMutexWriteBlocksRead(t *testing.T) {
 		t.Fatal("写锁释放后读锁应获得")
 	}
 }
+
+func TestGuardRWMutexReadBlocksWrite(t *testing.T) {
+	g := newTestGuardRWMutex()
+	defer g.Close()
+	m := g.GetRWLock("k")
+	m.RLock()
+	acquired := make(chan struct{})
+	go func() {
+		m.Lock()
+		close(acquired)
+		m.Unlock()
+	}()
+	select {
+	case <-acquired:
+		t.Fatal("读锁持有时写锁不应获得")
+	case <-time.After(20 * time.Millisecond):
+	}
+	m.RUnlock()
+	select {
+	case <-acquired:
+	case <-time.After(time.Second):
+		t.Fatal("读锁释放后写锁应获得")
+	}
+}
+
+func TestGuardRWMutexSameKeySameLock(t *testing.T) {
+	g := newTestGuardRWMutex()
+	defer g.Close()
+	m1 := g.GetRWLock("k")
+	m2 := g.GetRWLock("k")
+	if m1._RWMutex != m2._RWMutex {
+		t.Fatal("相同 key 应返回同一把锁")
+	}
+}
+
+func TestGuardRWMutexDifferentKeys(t *testing.T) {
+	g := newTestGuardRWMutex()
+	defer g.Close()
+	m1 := g.GetRWLock("a")
+	m2 := g.GetRWLock("b")
+	if m1._RWMutex == m2._RWMutex {
+		t.Fatal("不同 key 应返回不同锁")
+	}
+}
+
+func TestGuardRWMutexCloseIdempotent(t *testing.T) {
+	g := newTestGuardRWMutex()
+	g.Close()
+	g.Close() // 幂等，不应 panic
+}
