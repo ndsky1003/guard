@@ -57,13 +57,13 @@ type rwmutex struct {
 	fn func()
 }
 
-func (m rwmutex) Lock() {
+func (m *rwmutex) Lock() {
 	if m._RWMutex != nil {
 		m._RWMutex.Lock()
 	}
 }
 
-func (m rwmutex) Unlock() {
+func (m *rwmutex) Unlock() {
 	if m._RWMutex != nil {
 		m._RWMutex.Unlock()
 	}
@@ -72,13 +72,13 @@ func (m rwmutex) Unlock() {
 	}
 }
 
-func (m rwmutex) RLock() {
+func (m *rwmutex) RLock() {
 	if m._RWMutex != nil {
 		m._RWMutex.RLock()
 	}
 }
 
-func (m rwmutex) RUnlock() {
+func (m *rwmutex) RUnlock() {
 	if m._RWMutex != nil {
 		m._RWMutex.RUnlock()
 	}

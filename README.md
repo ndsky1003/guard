@@ -9,7 +9,7 @@
 | 行锁 guard | `guard.go` | 资源只能被一个使用者占用，冲突直接报错 |
 | 防抖 guardtime | `guard_time.go` | 避免客户端重复操作（如发短信），间隔内重复调用报错 |
 | 锁 guardmutex | `guard_mutex.go` | 基于 key 的互斥锁 / 读写锁 |
-| 限流 guardwait | `guard_wait_refactored.go` | 高峰时阻塞等待，限制同时进入的数量 |
+| 限流 guardwait | `guard_wait_sem.go` | 高峰时阻塞等待，限制同时进入的数量 |
 
 ```sh
 go get github.com/ndsky1003/guard
@@ -122,35 +122,36 @@ m.RUnlock()
 高峰时阻塞等待，控制同时进入的数量；容量为 1 时即单线程串行。
 
 ```go
-gw := guard.NewGuardWait(10*time.Second, 30*time.Minute)
+gw := guard.NewGuardWaitSem(10*time.Second, 30*time.Minute)
 defer gw.Close()
 
-bucket, err := gw.GetBucket("bucket", 2) // 允许 2 个操作同时进入
+sem, err := gw.GetSem("bucket", 2) // 允许 2 个操作同时进入
 if err != nil {
     return err
 }
+defer sem.Release() // 释放租约引用
 
-if err := bucket.Acquire(context.Background()); err != nil { // 阻塞直到拿到许可，或 ctx 取消
+if err := sem.Acquire(context.Background(), 1); err != nil { // 阻塞直到拿到许可，或 ctx 取消
     return err
 }
-defer bucket.Release()
+defer sem.ReleaseTicket(1) // 释放许可
 // 访问资源
 ```
 
-- `NewGuardWait(checkInterval, bucketLifeTime)`：
-  - `checkInterval` 桶过期检查粒度（时间轮 tick）。
-  - `bucketLifeTime` 桶多久不使用就自动释放。
-- `GetBucket(key string, cap int64) (*Bucket, error)`：`key` 非空、`cap` 为正。
-- `Acquire(ctx)` 阻塞直到获取许可，`ctx` 取消/超时返回错误；`Release()` 释放许可。
-- `Close()` 停止内部时间轮，释放所有桶。
+- `NewGuardWaitSem(checkInterval, ttl)`：
+  - `checkInterval` 信号量过期检查粒度（时间轮 tick）。
+  - `ttl` 信号量多久不使用就自动释放。
+- `GetSem(key string, cap int64) (*Sem, error)`：`key` 非空、`cap` 为正。
+- `Acquire(ctx, n)` 阻塞直到获取 `n` 个许可，`ctx` 取消/超时返回错误；`ReleaseTicket(n)` 释放许可；`Release()` 释放租约引用。
+- `Close()` 停止内部时间轮，释放所有信号量。
 
 带超时的限流：
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 defer cancel()
-if err := bucket.Acquire(ctx); err != nil {
+if err := sem.Acquire(ctx, 1); err != nil {
     return err // 1 秒内没拿到许可
 }
-defer bucket.Release()
+defer sem.ReleaseTicket(1)
 ```

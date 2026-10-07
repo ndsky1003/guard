@@ -66,25 +66,27 @@ func BenchmarkGuardRWMutexRLock(b *testing.B) {
 }
 
 func BenchmarkGuardWaitAcquire(b *testing.B) {
-	gw := NewGuardWait(time.Second, time.Minute)
+	gw := NewGuardWaitSem(time.Second, time.Minute)
 	defer gw.Close()
-	bucket, _ := gw.GetBucket("k", 1024)
+	bucket, _ := gw.GetSem("k", 1024)
+	defer bucket.Release()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = bucket.Acquire(context.Background())
-			bucket.Release()
+			_ = bucket.Acquire(context.Background(), 1)
+			bucket.ReleaseTicket(1)
 		}
 	})
 }
 
 func BenchmarkGuardWaitAcquireContended(b *testing.B) {
-	gw := NewGuardWait(time.Second, time.Minute)
+	gw := NewGuardWaitSem(time.Second, time.Minute)
 	defer gw.Close()
-	bucket, _ := gw.GetBucket("k", 1)
+	bucket, _ := gw.GetSem("k", 1)
+	defer bucket.Release()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = bucket.Acquire(context.Background())
-			bucket.Release()
+			_ = bucket.Acquire(context.Background(), 1)
+			bucket.ReleaseTicket(1)
 		}
 	})
 }

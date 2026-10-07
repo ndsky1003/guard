@@ -57,11 +57,11 @@ type mutex struct {
 	fn func()
 }
 
-func (m mutex) Lock() {
+func (m *mutex) Lock() {
 	m._Mutex.Lock()
 }
 
-func (m mutex) Unlock() {
+func (m *mutex) Unlock() {
 	m._Mutex.Unlock()
 	if m.fn != nil {
 		m.fn()
