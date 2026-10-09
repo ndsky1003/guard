@@ -6,7 +6,7 @@ import (
 	"github.com/ndsky1003/lease"
 )
 
-type guard_time struct {
+type GuardTime struct {
 	opt *OptionGuardtime
 	l   *lease.Lease[any, time.Time]
 }
@@ -21,14 +21,14 @@ type guard_time struct {
 //	if err := gt.Handle("user_id"); err != nil {
 //		// 5 秒内重复请求会走到这里
 //	}
-func NewGuardTime(opts ...*OptionGuardtime) *guard_time {
+func NewGuardTime(opts ...*OptionGuardtime) *GuardTime {
 	opt := OptionsGuardtime().
 		SetInterval(5 * time.Second).
 		SetTick(10 * time.Second).
 		SetRenewInterval(1 * time.Second).
 		SetErr(ErrTooManyOperations).
 		Merge(opts...)
-	g := &guard_time{
+	g := &GuardTime{
 		opt: opt,
 	}
 	g.l = lease.NewWithOptions(lease.Options[any, time.Time]{
@@ -42,7 +42,7 @@ func NewGuardTime(opts ...*OptionGuardtime) *guard_time {
 // Handle 处理一次对 key 的访问。
 // 若 key 在 Interval 内已被访问过，则返回配置的错误；否则记录本次访问并返回 nil。
 // 可通过 opts 按 key 覆盖实例默认的防抖间隔和错误（不同 key 可用不同间隔）。
-func (this *guard_time) Handle(key any, opts ...*OptionGuardtimeHandle) error {
+func (this *GuardTime) Handle(key any, opts ...*OptionGuardtimeHandle) error {
 	interval := *this.opt.Interval
 	err := this.opt.Err
 	for _, h := range opts {
@@ -69,7 +69,7 @@ func (this *guard_time) Handle(key any, opts ...*OptionGuardtimeHandle) error {
 }
 
 // Close 停止内部租约时间轮并释放所有条目；重复调用安全（幂等）。
-func (this *guard_time) Close() {
+func (this *GuardTime) Close() {
 	if this != nil && this.l != nil {
 		this.l.Stop()
 	}

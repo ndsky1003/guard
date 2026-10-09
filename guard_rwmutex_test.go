@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func newTestGuardRWMutex() *guard_rwmutex {
+func newTestGuardRWMutex() *GuardRWMutex {
 	return NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
 }
 

@@ -11,7 +11,7 @@ type _RWMutex struct {
 	*sync.RWMutex
 }
 
-type guard_rwmutex struct {
+type GuardRWMutex struct {
 	TTL time.Duration
 	l   *lease.Lease[any, *_RWMutex]
 }
@@ -19,11 +19,11 @@ type guard_rwmutex struct {
 // NewGuardRWMutex 创建一个命名读写锁管理器。
 // ttl 是单把锁的空闲存活时长（低于 1 分钟会强制为 1 分钟）；
 // tick 是租约到期检查粒度；renewInterval 是续期合并阈值（<=0 表示每次访问都续期）。
-func NewGuardRWMutex(ttl, tick, renewInterval time.Duration) *guard_rwmutex {
+func NewGuardRWMutex(ttl, tick, renewInterval time.Duration) *GuardRWMutex {
 	if ttl < 1*time.Minute {
 		ttl = time.Minute
 	}
-	d := &guard_rwmutex{
+	d := &GuardRWMutex{
 		TTL: ttl,
 		l: lease.NewWithOptions(lease.Options[any, *_RWMutex]{
 			Tick:          tick,
@@ -37,7 +37,7 @@ func NewGuardRWMutex(ttl, tick, renewInterval time.Duration) *guard_rwmutex {
 }
 
 // GetRWLock 获取 key 对应的命名读写锁；同一 key 返回同一把底层锁，空闲超时自动回收。
-func (g *guard_rwmutex) GetRWLock(key any) *rwmutex {
+func (g *GuardRWMutex) GetRWLock(key any) *rwmutex {
 	v, release, _ := g.l.MustGet(key, g.TTL)
 	return &rwmutex{
 		_RWMutex: v,
@@ -46,7 +46,7 @@ func (g *guard_rwmutex) GetRWLock(key any) *rwmutex {
 }
 
 // Close 停止内部租约时间轮并释放所有空闲条目；重复调用安全（幂等）。
-func (g *guard_rwmutex) Close() {
+func (g *GuardRWMutex) Close() {
 	if g != nil && g.l != nil {
 		g.l.Stop()
 	}

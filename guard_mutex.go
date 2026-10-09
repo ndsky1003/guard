@@ -7,7 +7,7 @@ import (
 	"github.com/ndsky1003/lease"
 )
 
-type guard_mutex struct {
+type GuardMutex struct {
 	TTL time.Duration
 	l   *lease.Lease[any, *_Mutex]
 }
@@ -15,11 +15,11 @@ type guard_mutex struct {
 // NewGuardMutex 创建一个命名互斥锁管理器。
 // ttl 是单把锁的空闲存活时长（低于 1 分钟会强制为 1 分钟）；
 // tick 是租约到期检查粒度；renewInterval 是续期合并阈值（<=0 表示每次访问都续期）。
-func NewGuardMutex(ttl, tick, renewInterval time.Duration) *guard_mutex {
+func NewGuardMutex(ttl, tick, renewInterval time.Duration) *GuardMutex {
 	if ttl < 1*time.Minute {
 		ttl = time.Minute
 	}
-	d := &guard_mutex{
+	d := &GuardMutex{
 		TTL: ttl,
 		l: lease.NewWithOptions(lease.Options[any, *_Mutex]{
 			Tick:          tick,
@@ -33,7 +33,7 @@ func NewGuardMutex(ttl, tick, renewInterval time.Duration) *guard_mutex {
 }
 
 // GetLock 获取 key 对应的命名互斥锁；同一 key 返回同一把底层锁，空闲超时自动回收。
-func (g *guard_mutex) GetLock(key any) *mutex {
+func (g *GuardMutex) GetLock(key any) *mutex {
 	v, release, _ := g.l.MustGet(key, g.TTL)
 	return &mutex{
 		_Mutex: v,
@@ -42,7 +42,7 @@ func (g *guard_mutex) GetLock(key any) *mutex {
 }
 
 // Close 停止内部租约时间轮并释放所有空闲条目；重复调用安全（幂等）。
-func (g *guard_mutex) Close() {
+func (g *GuardMutex) Close() {
 	if g != nil && g.l != nil {
 		g.l.Stop()
 	}

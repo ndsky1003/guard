@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func newTestGuardMutex() *guard_mutex {
+func newTestGuardMutex() *GuardMutex {
 	return NewGuardMutex(time.Hour, 30*time.Second, time.Second)
 }
 
