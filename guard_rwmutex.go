@@ -37,9 +37,9 @@ func NewGuardRWMutex(ttl, tick, renewInterval time.Duration) *GuardRWMutex {
 }
 
 // GetRWLock 获取 key 对应的命名读写锁；同一 key 返回同一把底层锁，空闲超时自动回收。
-func (g *GuardRWMutex) GetRWLock(key any) *rwmutex {
+func (g *GuardRWMutex) GetRWLock(key any) *RWMutex {
 	v, release, _ := g.l.MustGet(key, g.TTL)
-	return &rwmutex{
+	return &RWMutex{
 		_RWMutex: v,
 		fn:       release,
 	}
@@ -52,18 +52,18 @@ func (g *GuardRWMutex) Close() {
 	}
 }
 
-type rwmutex struct {
+type RWMutex struct {
 	*_RWMutex
 	fn func()
 }
 
-func (m *rwmutex) Lock() {
+func (m *RWMutex) Lock() {
 	if m._RWMutex != nil {
 		m._RWMutex.Lock()
 	}
 }
 
-func (m *rwmutex) Unlock() {
+func (m *RWMutex) Unlock() {
 	if m._RWMutex != nil {
 		m._RWMutex.Unlock()
 	}
@@ -72,13 +72,13 @@ func (m *rwmutex) Unlock() {
 	}
 }
 
-func (m *rwmutex) RLock() {
+func (m *RWMutex) RLock() {
 	if m._RWMutex != nil {
 		m._RWMutex.RLock()
 	}
 }
 
-func (m *rwmutex) RUnlock() {
+func (m *RWMutex) RUnlock() {
 	if m._RWMutex != nil {
 		m._RWMutex.RUnlock()
 	}

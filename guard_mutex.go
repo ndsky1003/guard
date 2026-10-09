@@ -33,9 +33,9 @@ func NewGuardMutex(ttl, tick, renewInterval time.Duration) *GuardMutex {
 }
 
 // GetLock 获取 key 对应的命名互斥锁；同一 key 返回同一把底层锁，空闲超时自动回收。
-func (g *GuardMutex) GetLock(key any) *mutex {
+func (g *GuardMutex) GetLock(key any) *Mutex {
 	v, release, _ := g.l.MustGet(key, g.TTL)
-	return &mutex{
+	return &Mutex{
 		_Mutex: v,
 		fn:     release,
 	}
@@ -52,16 +52,16 @@ type _Mutex struct {
 	*sync.Mutex
 }
 
-type mutex struct {
+type Mutex struct {
 	*_Mutex
 	fn func()
 }
 
-func (m *mutex) Lock() {
+func (m *Mutex) Lock() {
 	m._Mutex.Lock()
 }
 
-func (m *mutex) Unlock() {
+func (m *Mutex) Unlock() {
 	m._Mutex.Unlock()
 	if m.fn != nil {
 		m.fn()
