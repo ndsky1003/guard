@@ -19,6 +19,8 @@ go get github.com/ndsky1003/guard
 
 ---
 
+> **生命周期约定**：基于 `lease` 的门卫（`GuardTime` / `GuardMutex` / `GuardRWMutex` / `GuardWaitSem` / `GuardWaitCond`）在 `Close()` 后会停止内部时间轮并释放所有条目，`Close()` 幂等。**必须先停流量、再 `Close()`**——`Close()` 之后再调用 `GetLock`/`GetRWLock`/`GetSem`/`GetBucket` 等不会 panic，但新写入的条目永远不会被回收（时间轮已停、无后台清理），造成内存泄漏。因此 `Close()` 通常只在进程/服务退出前调用一次。
+
 ## 1. 行锁 Guard
 
 相当于数据库的行锁：同一时刻只能有一个使用者占用一个资源，冲突直接返回错误（不等待）。
@@ -123,6 +125,7 @@ g := guard.NewGuardMutex(time.Hour, 30*time.Second, time.Second)
 defer g.Close()
 
 m := g.GetLock("resource_id")
+defer m.Release() // 交还租约引用
 m.Lock()
 defer m.Unlock()
 // 临界区
@@ -136,7 +139,8 @@ defer m.Unlock()
 | `tick` | 租约到期检查粒度 |
 | `renewInterval` | 续期合并阈值（`<=0` 表示每次访问都续期） |
 
-`Lock`/`Unlock` 必须成对调用，`Unlock` 会释放本次 `GetLock` 持有的租约引用。
+`Lock`/`Unlock` 必须成对调用；`Release` 交还本次 `GetLock` 持有的租约引用，
+用完后应 `defer m.Release()`，否则该 key 的锁条目不会被空闲回收（引用泄漏）。
 
 ---
 
@@ -149,6 +153,7 @@ g := guard.NewGuardRWMutex(time.Hour, 30*time.Second, time.Second)
 defer g.Close()
 
 m := g.GetRWLock("resource_id")
+defer m.Release() // 交还租约引用
 
 m.Lock()      // 写锁
 m.Unlock()
@@ -157,7 +162,8 @@ m.RLock()     // 读锁
 m.RUnlock()
 ```
 
-参数同 `GuardMutex`；`Lock`/`Unlock`、`RLock`/`RUnlock` 均须成对调用，`Unlock`/`RUnlock` 会释放本次租约引用。
+参数同 `GuardMutex`；`Lock`/`Unlock`、`RLock`/`RUnlock` 均须成对调用；
+`Release` 交还本次 `GetRWLock` 持有的租约引用，用完后应 `defer m.Release()`。
 
 ---
 
@@ -280,25 +286,25 @@ if b.TryGotTicket() { // 非阻塞尝试获取
 
 | Benchmark | 场景 | ns/op | B/op | allocs/op |
 |-----------|------|-------|------|-----------|
-| `GuardMutexLock` | 命名互斥锁（1000 key） | 131.9 | 60 | 2 |
-| `GuardRWMutexRLock` | 读写锁读（1000 key） | 131.9 | 60 | 2 |
-| `GuardTimeHandle` | 防抖 | 132.3 | 60 | 2 |
-| `GuardRWMutexLock` | 读写锁写（1000 key） | 132.7 | 60 | 2 |
-| `GuardWaitSemWeighted` | 限流加权（无竞争） | 178.6 | 0 | 0 |
-| `GuardWaitAcquire` | 限流（无竞争） | 178.7 | 0 | 0 |
-| `GuardWaitCondTicketContended` | 限流 cond（竞争） | 204.5 | 0 | 0 |
-| `GuardWaitAcquireContended` | 限流（竞争） | 212.6 | 175 | 2 |
-| `GuardMutexLockContended` | 互斥锁（竞争） | 214.0 | 52 | 2 |
-| `GuardRWMutexRLockContended` | 读锁（竞争） | 217.7 | 52 | 2 |
-| `GuardWaitCondTicket` | 限流 cond（无竞争） | 224.5 | 0 | 0 |
-| `GuardCheck` | 行锁 Check | 248.4 | 76 | 2 |
-| `GuardAcquire` | 行锁 Acquire（幂等释放） | 272.2 | 138 | 4 |
+| `GuardMutexLock` | 命名互斥锁（1000 key） | 128.2 | 60 | 2 |
+| `GuardRWMutexLock` | 读写锁写（1000 key） | 128.5 | 60 | 2 |
+| `GuardRWMutexRLock` | 读写锁读（1000 key） | 129.8 | 60 | 2 |
+| `GuardTimeHandle` | 防抖 | 130.3 | 60 | 2 |
+| `GuardWaitSemWeighted` | 限流加权（无竞争） | 177.0 | 0 | 0 |
+| `GuardWaitAcquire` | 限流（无竞争） | 180.3 | 0 | 0 |
+| `GuardRWMutexRLockContended` | 读锁（竞争） | 184.2 | 52 | 2 |
+| `GuardWaitCondTicketContended` | 限流 cond（竞争） | 199.7 | 0 | 0 |
+| `GuardMutexLockContended` | 互斥锁（竞争） | 204.9 | 52 | 2 |
+| `GuardWaitAcquireContended` | 限流（竞争） | 215.0 | 175 | 2 |
+| `GuardWaitCondTicket` | 限流 cond（无竞争） | 229.5 | 0 | 0 |
+| `GuardCheck` | 行锁 Check | 248.2 | 76 | 2 |
+| `GuardAcquire` | 行锁 Acquire（幂等释放） | 266.9 | 138 | 4 |
 
 要点：
 
-- 所有门卫操作都在 **130–280 ns** 量级。
-- **最便宜**：命名互斥锁 / 读写锁 / 防抖（~132 ns），内部是 `lease` + 简单加锁。
-- **最贵**：行锁 Guard（248–272 ns），因为走 `sync.Map`，且 `Acquire` 为幂等释放额外创建 `sync.Once` 闭包（4 allocs）。
+- 所有门卫操作都在 **128–267 ns** 量级。
+- **最便宜**：命名互斥锁 / 读写锁 / 防抖（~128 ns），内部是 `lease` + 简单加锁。
+- **最贵**：行锁 Guard（248–267 ns），因为走 `sync.Map`，且 `Acquire` 为幂等释放额外创建 `sync.Once` 闭包（4 allocs）。
 - **限流无竞争零分配**：sem 加权 / 普通路径 0 alloc（快速路径直接 `cur += n`）。
-- **限流竞争对比**：`sync.Cond` 版（205 ns，0 alloc）在竞争下比 sem 版（213 ns，2 alloc）略优且零分配——sem 版每次排队要分配 `waiter` 节点，cond 版走 runtime 信号量无分配。
-- **行锁 `Check` 比 `Acquire` 快约 10%**，但 `Acquire` 更安全（幂等释放规避 ABA），是用少量性能换正确性。
+- **限流竞争对比**：`sync.Cond` 版（200 ns，0 alloc）在竞争下比 sem 版（215 ns，2 alloc）略优且零分配——sem 版每次排队要分配 `waiter` 节点，cond 版走 runtime 信号量无分配。
+- **行锁 `Check` 比 `Acquire` 快约 7%**，但 `Acquire` 更安全（幂等释放规避 ABA），是用少量性能换正确性。

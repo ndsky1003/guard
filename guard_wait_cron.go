@@ -2,7 +2,6 @@ package guard
 
 import (
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -19,8 +18,8 @@ type GuardWaitCond struct {
 
 // condBucket 是底层共享桶：票计数 + 条件变量。
 type condBucket struct {
-	cap       int
-	available int        // 可用票数
+	cap       int64
+	available int64      // 可用票数
 	cond      *sync.Cond // 条件变量
 	mu        sync.Mutex // 保护 available / waiting
 	waiting   int        // 等待中的 goroutine 数量
@@ -46,6 +45,14 @@ func NewGuardWaitCond(checkInterval, ttl time.Duration) *GuardWaitCond {
 	return g
 }
 
+// Len 返回当前持有的限流桶数量（key+容量 组合数）。用于监控与测试。
+func (g *GuardWaitCond) Len() int {
+	if g == nil || g.l == nil {
+		return 0
+	}
+	return g.l.Len()
+}
+
 // Close 停止租约时间轮，释放所有桶；重复调用安全（幂等）。
 func (g *GuardWaitCond) Close() {
 	if g != nil && g.l != nil {
@@ -55,7 +62,7 @@ func (g *GuardWaitCond) Close() {
 
 // GetBucket 获取一个指定 key 和容量的桶；相同 key 与容量复用同一个底层桶。
 // 返回的 BucketCond 用完后需调用 Release 释放租约引用。
-func (g *GuardWaitCond) GetBucket(key string, cap int) (*BucketCond, error) {
+func (g *GuardWaitCond) GetBucket(key string, cap int64) (*BucketCond, error) {
 	if key == "" {
 		return nil, fmt.Errorf("key cannot be empty")
 	}
@@ -64,7 +71,7 @@ func (g *GuardWaitCond) GetBucket(key string, cap int) (*BucketCond, error) {
 	}
 
 	// 将容量编码进底层 key，保证相同 key 不同容量各自独立，互不复用。
-	k := key + ":" + strconv.Itoa(cap)
+	k := bucketKey(key, cap)
 	cb, release, err := g.l.MustGetWithGen(k, g.ttl, func(s string) (*condBucket, error) {
 		b := &condBucket{
 			cap:       cap,

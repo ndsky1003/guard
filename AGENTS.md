@@ -21,8 +21,8 @@ go vet ./...
 
 - `guard.go`：行锁语义，`NewGuard(errs ...error)` + `Check(key)` / `Acquire(key)` / `Release(key)`，基于 `sync.Map.LoadOrStore`，冲突返回实例错误（默认 `ErrResourceInUse`）。
 - `guard_time.go`：防抖，`NewGuardTime(...)` + `Handle(key, opts ...*OptionGuardtimeHandle)`，用 `lease.Lease` 记录时间戳，间隔内重复调用返回错误。
-- `guard_mutex.go`：`NewGuardMutex(ttl, tick, renewInterval)` + 实例方法 `GetLock(key)`，基于 `lease.Lease`，TTL 强制最小 `1*time.Minute`，`Close()` 停止后台时间轮。
-- `guard_rwmutex.go`：`NewGuardRWMutex(ttl, tick, renewInterval)` + 实例方法 `GetRWLock(key)`，同上。
+- `guard_mutex.go`：`NewGuardMutex(ttl, tick, renewInterval)` + 实例方法 `GetLock(key)`，基于 `lease.Lease`，TTL 强制最小 `1*time.Minute`，`Close()` 停止后台时间轮。`GetLock` 返回的 `*Mutex` 句柄持有一次租约引用，用完必须 `defer m.Release()` 交还（`Lock`/`Unlock` 不触碰引用）。
+- `guard_rwmutex.go`：`NewGuardRWMutex(ttl, tick, renewInterval)` + 实例方法 `GetRWLock(key)`，同上。`GetRWLock` 返回的 `*RWMutex` 句柄持有一次租约引用，用完必须 `defer m.Release()` 交还（`Lock`/`Unlock`/`RLock`/`RUnlock` 不触碰引用）。
 - `guard_wait_sem.go`：限流，`NewGuardWaitSem(checkInterval, ttl)` + 实例方法 `GetSem(key, cap)`，基于 `semaphore.Weighted`，`Sem.Acquire(ctx, n)` / `ReleaseTicket(n)` / `Release()` 分别管理许可与租约引用。
 - `guard_wait_cron.go`：限流的另一套实现，基于 `sync.Cond`，`NewGuardWaitCond` 返回 `*GuardWaitCond`，`GetBucket(key, cap)` → `BucketCond.GotTicket()/ReleaseTicket()/TryGotTicket()/Release()`。
 - 仅 `guard.go` 有包级单例 `defaultGuard`（`atomic.Pointer`，`init` 时创建，可用 `SetDefault` 替换）；`guard_mutex` 为纯实例，无全局单例。
@@ -31,6 +31,7 @@ go vet ./...
 
 - 主限流 API 在 `guard_wait_sem.go`：`NewGuardWaitSem(checkInterval, ttl)` → `GetSem(key, cap int64) (*Sem, error)` → `Sem.Acquire(ctx, n)` / `Sem.ReleaseTicket(n)` / `Sem.Release()`。
 - **两套 guardwait 实现并存**：`guard_wait_sem.go`（`semaphore.Weighted`，支持 context 与加权）与 `guard_wait_cron.go`（`sync.Cond`，不支持 context、固定 1 票，但高竞争场景零分配）。改动限流逻辑优先改 `guard_wait_sem.go`。
+- **`GetLock`/`GetRWLock` 句柄必须 `defer Release`**：句柄持有一次租约引用，`Lock`/`Unlock`、`RLock`/`RUnlock` 不再自动交还引用；忘 `Release` 会导致该 key 的锁条目永不回收（引用泄漏）。`Release` 之后不应再使用该句柄加锁（条目可能已被回收，同 key 再次 `GetLock`/`GetRWLock` 会拿到全新的锁，互斥失效）。
 
 ## 风格约定
 

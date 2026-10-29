@@ -57,10 +57,7 @@ type GuardWaitSem struct {
 }
 
 // NewGuardWaitSem 创建一个新的 GuardWaitSem 管理器。
-/*
-checkInterval 租约到期检查粒度（时间轮 tick）
-ttl 信号量多久不用就释放掉
-*/
+// checkInterval 是租约到期检查粒度（时间轮 tick）；ttl 是信号量多久不用就释放。
 func NewGuardWaitSem(checkInterval, ttl time.Duration) *GuardWaitSem {
 	if checkInterval <= 0 {
 		checkInterval = time.Second
@@ -73,6 +70,14 @@ func NewGuardWaitSem(checkInterval, ttl time.Duration) *GuardWaitSem {
 		RenewInterval: 1 * time.Minute,
 	})
 	return g
+}
+
+// Len 返回当前持有的信号量数量（key+容量 组合数）。用于监控与测试。
+func (g *GuardWaitSem) Len() int {
+	if g == nil || g.l == nil {
+		return 0
+	}
+	return g.l.Len()
 }
 
 // Close 停止租约时间轮，释放所有信号量；重复调用安全（幂等）。
@@ -93,7 +98,7 @@ func (g *GuardWaitSem) GetSem(key string, cap int64) (*Sem, error) {
 	}
 
 	// 将容量编码进底层 key，保证相同 key 不同容量各自独立，互不复用信号量。
-	k := key + ":" + strconv.FormatInt(cap, 10)
+	k := bucketKey(key, cap)
 	sem, release, err := g.l.MustGetWithGen(k, g.ttl, func(s string) (*semaphore.Weighted, error) {
 		return semaphore.NewWeighted(cap), nil
 	})
@@ -101,4 +106,10 @@ func (g *GuardWaitSem) GetSem(key string, cap int64) (*Sem, error) {
 		return nil, err
 	}
 	return &Sem{sem: sem, release: release, cap: cap}, nil
+}
+
+// bucketKey 把业务 key 与容量编码成底层租约 key，保证相同 key 不同容量互不复用。
+// 两个限流实现（GuardWaitSem 与 GuardWaitCond）共用。
+func bucketKey(key string, cap int64) string {
+	return key + ":" + strconv.FormatInt(cap, 10)
 }

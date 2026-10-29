@@ -37,6 +37,7 @@ func BenchmarkGuardMutexLock(b *testing.B) {
 			m := g.GetLock(i % 1000)
 			m.Lock()
 			m.Unlock()
+			m.Release()
 		}
 	})
 }
@@ -49,6 +50,7 @@ func BenchmarkGuardRWMutexLock(b *testing.B) {
 			m := g.GetRWLock(i % 1000)
 			m.Lock()
 			m.Unlock()
+			m.Release()
 		}
 	})
 }
@@ -61,6 +63,7 @@ func BenchmarkGuardRWMutexRLock(b *testing.B) {
 			m := g.GetRWLock(i % 1000)
 			m.RLock()
 			m.RUnlock()
+			m.Release()
 		}
 	})
 }
@@ -138,6 +141,7 @@ func BenchmarkGuardMutexLockContended(b *testing.B) {
 			m := g.GetLock(1) // 固定 key，模拟高竞争
 			m.Lock()
 			m.Unlock()
+			m.Release()
 		}
 	})
 }
@@ -150,6 +154,7 @@ func BenchmarkGuardRWMutexRLockContended(b *testing.B) {
 			m := g.GetRWLock(1) // 固定 key，模拟高竞争
 			m.RLock()
 			m.RUnlock()
+			m.Release()
 		}
 	})
 }
